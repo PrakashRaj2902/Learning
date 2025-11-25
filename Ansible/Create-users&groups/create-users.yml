@@ -1,0 +1,25 @@
+---
+- name: Create users and add to a group
+  hosts: all
+  become: yes  # Needed for user and group tasks
+  vars:
+    group_name: devops_team
+    user_list:
+      - prakash
+      - arun
+      - vicky
+
+  tasks:
+    - name: Create a group
+      group:
+        name: "{{ group_name }}"
+        state: present
+
+    - name: Create users and add to the group
+      user:
+        name: "{{ item }}"
+        groups: "{{ group_name }}"
+        append: yes
+        shell: /bin/bash
+        state: present
+      loop: "{{ user_list }}"

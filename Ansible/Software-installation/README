@@ -1,0 +1,8 @@
+Run everything:
+ansible-playbook -i inventories/dev/hosts site.yml
+
+Run only docker-related tasks:
+ansible-playbook -i inventories/dev/hosts site.yml --tags docker
+
+Run everything except apt cache update:
+ansible-playbook -i inventories/dev/hosts site.yml --skip-tags apt-cache

@@ -1,0 +1,20 @@
+Command	Description
+kubectl version	            Shows the kubectl and cluster version
+kubectl config view	            Displays kubeconfig settings
+kubectl get nodes	            Lists all nodes in the cluster
+kubectl get pods	            Lists all pods in the current namespace
+kubectl get all	            Lists all resources in the current namespace
+kubectl get services	L           ists all services
+kubectl describe pod pod_name           	Shows detailed info about a pod
+kubectl logs pod_name           	Shows logs from a container inside the pod
+kubectl exec -it pod_name -- bash	            Access shell inside a running pod
+kubectl create -f file.yaml         	Creates resource(s) from a YAML file
+kubectl apply -f file.yaml	            Creates or updates resource(s) from a YAML file
+kubectl delete -f file.yaml	            Deletes resource(s) defined in the YAML
+kubectl delete pod pod_name	            Deletes a specific pod
+kubectl get deployments	            Lists all deployments
+kubectl rollout status deployment deployment_name	        Checks rollout status of a deployment
+kubectl scale deployment deployment_name --replicas=3	            Scales deployment to 3 pods
+kubectl expose deployment deployment_name --type=NodePort --port=80	            Exposes deployment as a service
+kubectl port-forward pod/pod_name 8080:80	            Forwards local port to a pod port
+kubectl config use-context context_name	            Switches to another kubeconfig context

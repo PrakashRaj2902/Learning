@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+
+    environment {
+        GIT_REPO = 'https://github.com/your-username/your-repo.git'  // Replace with your repo
+        TF_DIR = 'terraform'              // Directory for Terraform files
+        TF_FILE = 'main.tf'               // Specific Terraform file (not strictly needed, but kept for clarity)
+        ANSIBLE_DIR = 'ansible'           // Directory for Ansible playbook and inventory
+        INVENTORY = 'inventory.ini'       // Inventory file for Ansible
+        PLAYBOOK = 'site.yml'             // Ansible playbook file
+        SSH_KEY = '~/.ssh/devops-key.pem' // Private SSH key for EC2 login
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                git url: "${GIT_REPO}", branch: 'main'  // Pull the latest code
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform init'  // Initialize Terraform configuration
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh "terraform plan -out=tfplan"  // Show planned actions
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir("${TF_DIR}") {
+                    sh 'terraform apply -auto-approve tfplan'  // Apply the planned changes
+                }
+            }
+        }
+
+        stage('Get EC2 IP & Generate Inventory') {
+            steps {
+                dir("${TF_DIR}") {
+                    script {
+                        def ec2_ip = sh(
+                            script: "terraform output -raw instance_public_ip", 
+                            returnStdout: true
+                        ).trim()
+
+                        // Write dynamic IP to Ansible inventory file
+                        writeFile file: "../${ANSIBLE_DIR}/${INVENTORY}", 
+                            text: "[ec2]\n${ec2_ip} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY}"
+                    }
+                }
+            }
+        }
+
+        stage('Run Ansible Playbook') {
+            steps {
+                dir("${ANSIBLE_DIR}") {
+                    sh "ansible-playbook -i ${INVENTORY} ${PLAYBOOK}"  // Execute playbook on EC2
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Deployment completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+        }
+        always {
+            echo '📦 Pipeline finished running.'
+        }
+    }
+}

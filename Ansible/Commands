@@ -1,0 +1,24 @@
+Command	Description
+ansible --version	      Shows the installed Ansible version
+ansible all -m ping	      Pings all hosts in inventory to check connectivity
+ansible all -m command -a "uptime"	        Runs a shell command on all remote hosts
+ansible all -m copy -a "src=/path/file dest=/remote/path"	        Copies file from local to remote hosts
+ansible all -m file -a "path=/opt/demo state=directory"	        Creates a directory on remote hosts
+ansible all -m user -a "name=user state=present"	        Creates a new user on remote hosts
+ansible all -m apt -a "name=nginx state=present" --become	        Installs package using apt (Debian/Ubuntu)
+ansible all -m yum -a "name=httpd state=present" --become	        Installs package using yum (RHEL/CentOS)
+ansible all -m service -a "name=nginx state=started" --become	        Starts a service on remote hosts
+ansible all -m service -a "name=nginx state=stopped" --become	        Stops a service on remote hosts
+ansible-playbook site.yml -i inventory	        Runs an Ansible playbook using specified inventory
+ansible-playbook playbook.yml --check	        Performs a dry run (no changes made)
+ansible-playbook playbook.yml --syntax-check	        Checks playbook syntax for errors
+ansible-playbook playbook.yml -vvv              increasing verbosity levels to get detailed error logs
+ansible-playbook playbook.yml --tags=                runs only the specified tagged task
+ansible-playbook playbook.yml --skip-tags=              skips the mentioned tagged task
+ansible-playbook playbook.yml --limit web1             Runs only targetted host 'web1'
+ansible-inventory --list	        Displays parsed inventory details
+ansible-galaxy init role_name       	Creates a new Ansible role directory structure
+ansible-vault encrypt file.yml      	Encrypts a file using Ansible Vault
+ansible-vault decrypt file.yml	        Decrypts a previously encrypted file
+ansible-vault edit file.yml	            Edits a vault-encrypted file securely
+ansible-playbook playbook.yml --ask-vault-pass          	Prompts for vault password while running playbook

@@ -1,0 +1,32 @@
+Command	Description
+docker --version	        Shows installed Docker version
+docker info	      Displays system-wide info about Docker setup
+docker build -t name .	      Builds Docker image from Dockerfile in current dir
+docker build --no-cache
+docker images	      Lists all locally stored Docker images
+docker rmi image_name	     Removes a Docker image
+docker run image	      Runs a container from the image
+docker run -d image	     Runs container in detached (background) mode
+docker run -it image	      Runs interactively with terminal access
+docker run -p 8080:80 image	      Maps host port to container port
+docker run image --restart=always
+docker run image --restart=on-failure
+docker run image --label env=key pair
+docker ps	      Lists running containers
+docker ps -a  	    Lists all containers (including stopped)
+docker stop container_id	     Stops a running container
+docker start container_id	     Starts a stopped container
+docker restart container_id	      Restarts a container
+docker rm container_id	     Removes a container
+docker logs container_id	      Shows logs from a container
+docker stat                   provides a real-time performance dashboard for running containers
+docker inspect              to view config and env details
+docker exec -it container bash	      Enters into running container using bash shell
+docker cp src container:/dest	      Copies files from host to container
+docker volume create myvol	     Creates a named volume
+docker network create mynet	      Creates a custom Docker network
+docker-compose up	      Starts all services defined in docker-compose.yml
+docker-compose down	     Stops and removes all services/containers from docker-compose.yml
+docker tag image repo/image:tag	      Tags image before pushing to a registry
+docker push repo/image:tag	      Pushes image to Docker Hub or other registry
+docker pull image	      Downloads image from registry (e.g., Docker Hub)

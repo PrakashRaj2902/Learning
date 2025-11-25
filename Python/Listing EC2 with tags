@@ -1,0 +1,31 @@
+import boto3  # Import the boto3 library to interact with AWS services
+
+# Create an EC2 client to interact with EC2 instances
+ec2 = boto3.client('ec2')
+
+# Fetch the details of all EC2 instances in your AWS account
+response = ec2.describe_instances()
+
+# Loop through each 'Reservation' in the response
+# A reservation can contain one or more EC2 instances that were launched together
+for r in response['Reservations']:
+    # Loop through each 'Instance' within the reservation
+    for i in r['Instances']:
+        # Print the Instance ID of the current EC2 instance
+        print("Instance ID:", i['InstanceId'])
+
+        # Get the tags associated with this EC2 instance (if any)
+        tags = i.get('Tags', [])  # Returns an empty list if no tags are found
+
+        # Check if there are any tags
+        if tags:
+            print("Tags:")  # Print a header for the tags section
+            # Loop through each tag and print its key and value
+            for tag in tags:
+                print(f"  {tag['Key']}: {tag['Value']}")
+        else:
+            # If no tags are found, print this message
+            print("No tags")
+
+        # Print a separator for better readability between instances
+        print("---")

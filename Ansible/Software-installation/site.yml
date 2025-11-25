@@ -1,0 +1,5 @@
+- name: Install software across environment
+  hosts: all
+  roles:
+    - role: software
+      tags: install

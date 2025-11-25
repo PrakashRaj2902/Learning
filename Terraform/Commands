@@ -1,0 +1,36 @@
+terraform init – Initialize Terraform in the working directory.
+
+terraform validate – Check whether the code syntax is correct.
+
+terraform plan – Show what Terraform will do before applying.
+
+terraform apply – Apply the changes and create/update resources.
+terraform apply - destroy  -  it shows the preview of destroy
+
+terraform destroy – Destroy all resources defined in the config.
+terraform destroy -target=resource  -  to delete the specific resource
+
+terraform fmt – Format the .tf files properly.
+
+terraform output – Show the output values after apply.
+
+terraform show – Show full state and resource details.
+
+terraform state list – List all resources tracked in state.
+
+terraform state show <resource> – Show detailed info about a specific resource.
+terraform state push - 
+terraform state rm - 
+terraform state mv - rename
+
+terraform taint <resource> – Mark a resource to be recreated on next apply.
+
+terraform untaint <resource> – Remove taint and keep the resource as-is.
+
+terraform graph – Generate a dependency graph of resources.
+
+terraform import <resource> <id> – Import an existing resource to Terraform.
+
+terraform refresh – Update state file from real infrastructure (old method).
+
+terraform workspace create

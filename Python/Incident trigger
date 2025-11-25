@@ -1,0 +1,51 @@
+import boto3
+import requests
+import json
+import os
+
+def lambda_handler(event, context):
+    # Get SNS message which contains details about the alarm
+    sns_message = event['Records'][0]['Sns']['Message']
+    
+    # Parse the SNS message to extract important details
+    alarm_name = sns_message['AlarmName']
+    state = sns_message['NewStateValue']
+    instance_id = sns_message['Trigger']['Dimensions'][0]['value']
+    message = sns_message['Trigger']['MetricName']  # Could be CPU, Disk, etc.
+    
+    # ServiceNow instance details
+    servicenow_instance = os.environ['SERVICENOW_INSTANCE']
+    servicenow_user = os.environ['SERVICENOW_USER']
+    servicenow_password = os.environ['SERVICENOW_PASSWORD']
+    
+    # Construct the payload for creating an incident in ServiceNow
+    incident_data = {
+        "short_description": f"Major Issue Detected on EC2 Instance {instance_id}",
+        "description": f"CloudWatch alarm {alarm_name} is in {state} state. Metric {message} exceeded threshold for EC2 instance {instance_id}.",
+        "category": "Hardware",  # Example category
+        "subcategory": "Server",  # Example subcategory
+        "urgency": "2",  # Medium urgency, can adjust based on requirements
+        "impact": "2",  # Medium impact, can adjust based on requirements
+        "caller_id": "Cloud Operations",  # Can be modified if needed
+    }
+
+    # ServiceNow REST API endpoint for creating incidents
+    servicenow_url = f'https://{servicenow_instance}.service-now.com/api/now/table/incident'
+
+    # Make the request to ServiceNow to create an incident
+    try:
+        response = requests.post(
+            servicenow_url,
+            auth=(servicenow_user, servicenow_password),
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(incident_data)
+        )
+
+        if response.status_code == 201:  # Check for successful creation
+            print(f"Incident created successfully: {response.json()}")
+        else:
+            print(f"Error creating incident: {response.status_code}, {response.text}")
+        
+    except Exception as e:
+        print(f"Error occurred while creating the incident in ServiceNow: {str(e)}")
+
