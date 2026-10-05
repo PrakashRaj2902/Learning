@@ -1,0 +1,29 @@
+GitHub Push / PR
+      ↓
+Checkout
+      ↓
+Maven Build
+      ↓
+Unit Test
+      ↓
+SonarQube
+      ↓
+Quality Gate
+      ↓
+Package JAR
+      ↓
+Dependency Security Scan
+      ↓
+Publish JAR → Nexus
+      ↓
+Docker Build
+      ↓
+Container Security Scan
+      ↓
+Push Image → ECR
+      ↓
+Deploy → Kubernetes
+      ↓
+Rollout Verification
+      ↓
+Smoke Test
