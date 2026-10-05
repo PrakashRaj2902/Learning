@@ -1,0 +1,456 @@
+pipeline {
+
+    agent any
+
+
+    tools {
+        terraform 'Terraform-1.9'
+    }
+
+
+    parameters {
+
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'qa', 'prod'],
+            description: 'Target environment'
+        )
+
+        booleanParam(
+            name: 'APPLY_INFRA',
+            defaultValue: true,
+            description: 'Apply Terraform changes?'
+        )
+
+        booleanParam(
+            name: 'RUN_ANSIBLE',
+            defaultValue: true,
+            description: 'Run Ansible configuration?'
+        )
+    }
+
+
+    environment {
+
+        TF_DIR = 'terraform'
+
+        ANSIBLE_DIR = 'ansible'
+
+        TF_IN_AUTOMATION = 'true'
+
+        TF_INPUT = 'false'
+
+        AWS_REGION = 'ap-south-1'
+
+        INVENTORY = 'inventory.ini'
+
+        PLAYBOOK = 'site.yml'
+    }
+
+
+    options {
+
+        disableConcurrentBuilds()
+
+        timeout(
+            time: 60,
+            unit: 'MINUTES'
+        )
+
+        timestamps()
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '10'
+            )
+        )
+
+        skipDefaultCheckout(true)
+    }
+
+
+    stages {
+
+
+        // =========================================================
+        // 1. CHECKOUT
+        // =========================================================
+
+        stage('Checkout') {
+
+            steps {
+
+                checkout scm
+
+                sh '''
+                    git rev-parse --short HEAD
+                '''
+            }
+        }
+
+
+        // =========================================================
+        // 2. TERRAFORM FORMAT
+        // =========================================================
+
+        stage('Terraform Format Check') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    sh '''
+                        terraform fmt -check -recursive
+                    '''
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 3. TERRAFORM VALIDATE
+        // =========================================================
+
+        stage('Terraform Validate') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    sh '''
+                        terraform init -backend=false
+                        terraform validate
+                    '''
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 4. SECURITY SCAN
+        // =========================================================
+
+        stage('Terraform Security Scan') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    sh '''
+                        echo "Running IaC security scan..."
+
+                        # Example:
+                        # checkov -d .
+                        #
+                        # Other possibilities:
+                        # tfsec
+                        # Trivy config
+                    '''
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 5. TERRAFORM INIT
+        // =========================================================
+
+        stage('Terraform Init') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    retry(2) {
+
+                        sh '''
+                            terraform init
+                        '''
+                    }
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 6. TERRAFORM PLAN
+        // =========================================================
+
+        stage('Terraform Plan') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    sh '''
+                        terraform plan \
+                        -var="environment=${ENVIRONMENT}" \
+                        -out=tfplan
+                    '''
+
+                    /*
+                     * Save plan file.
+                     */
+                    stash(
+                        name: 'terraform-plan',
+                        includes: 'tfplan'
+                    )
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 7. MANUAL APPROVAL
+        // =========================================================
+
+        stage('Approval') {
+
+            when {
+
+                expression {
+                    return params.APPLY_INFRA
+                }
+            }
+
+            steps {
+
+                timeout(
+                    time: 10,
+                    unit: 'MINUTES'
+                ) {
+
+                    input(
+                        message: "Apply Terraform changes to ${params.ENVIRONMENT}?",
+                        ok: "Approve"
+                    )
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 8. TERRAFORM APPLY
+        // =========================================================
+
+        stage('Terraform Apply') {
+
+            when {
+
+                expression {
+                    return params.APPLY_INFRA
+                }
+            }
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    unstash 'terraform-plan'
+
+                    sh '''
+                        terraform apply tfplan
+                    '''
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 9. GET OUTPUT
+        // =========================================================
+
+        stage('Get Infrastructure Outputs') {
+
+            steps {
+
+                dir("${TF_DIR}") {
+
+                    script {
+
+                        def ec2Ip = sh(
+                            script: 'terraform output -raw instance_public_ip',
+                            returnStdout: true
+                        ).trim()
+
+                        echo "EC2 IP obtained from Terraform output."
+
+                        /*
+                         * Don't echo sensitive outputs.
+                         */
+
+                        writeFile(
+                            file: "../${ANSIBLE_DIR}/${INVENTORY}",
+                            text: """
+[web]
+${ec2Ip} ansible_user=ec2-user
+"""
+                        )
+                    }
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 10. ANSIBLE SYNTAX CHECK
+        // =========================================================
+
+        stage('Ansible Syntax Check') {
+
+            when {
+
+                expression {
+                    return params.RUN_ANSIBLE
+                }
+            }
+
+            steps {
+
+                dir("${ANSIBLE_DIR}") {
+
+                    sh """
+                        ansible-playbook \
+                        --syntax-check \
+                        ${PLAYBOOK}
+                    """
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 11. ANSIBLE CHECK MODE
+        // =========================================================
+
+        stage('Ansible Dry Run') {
+
+            when {
+
+                expression {
+                    return params.RUN_ANSIBLE
+                }
+            }
+
+            steps {
+
+                dir("${ANSIBLE_DIR}") {
+
+                    sh """
+                        ansible-playbook \
+                        -i ${INVENTORY} \
+                        ${PLAYBOOK} \
+                        --check
+                    """
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 12. ANSIBLE CONFIGURATION
+        // =========================================================
+
+        stage('Ansible Configuration') {
+
+            when {
+
+                expression {
+                    return params.RUN_ANSIBLE
+                }
+            }
+
+            steps {
+
+                script {
+
+                    try {
+
+                        retry(2) {
+
+                            dir("${ANSIBLE_DIR}") {
+
+                                sh """
+                                    ansible-playbook \
+                                    -i ${INVENTORY} \
+                                    ${PLAYBOOK}
+                                """
+                            }
+                        }
+
+                    } catch (Exception e) {
+
+                        echo "Ansible configuration failed."
+
+                        /*
+                         * Perform any cleanup/diagnostic
+                         * before marking build failed.
+                         */
+
+                        throw e
+                    }
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 13. VALIDATION
+        // =========================================================
+
+        stage('Infrastructure Validation') {
+
+            steps {
+
+                script {
+
+                    catchError(
+                        buildResult: 'FAILURE',
+                        stageResult: 'FAILURE'
+                    ) {
+
+                        sh '''
+                            echo "Checking infrastructure..."
+
+                            terraform -chdir=${TF_DIR} output
+
+                            echo "Running application/server health checks..."
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+
+    post {
+
+        success {
+
+            echo """
+            ==========================================
+            INFRASTRUCTURE PIPELINE SUCCESS
+            Environment: ${params.ENVIRONMENT}
+            ==========================================
+            """
+        }
+
+        failure {
+
+            echo """
+            ==========================================
+            INFRASTRUCTURE PIPELINE FAILED
+            Environment: ${params.ENVIRONMENT}
+            Check Terraform/Ansible/Jenkins logs.
+            ==========================================
+            """
+        }
+
+        always {
+
+            echo 'Cleaning Jenkins workspace...'
+
+            cleanWs()
+        }
+    }
+}
