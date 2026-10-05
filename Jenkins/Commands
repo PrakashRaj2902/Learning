@@ -1,0 +1,42 @@
+| Feature | Meaning |
+|---|---|
+| `pipeline` | Declarative Jenkins pipeline definition |
+| `agent` | Pipeline execute aagura Jenkins machine/environment |
+| `tools` | Jenkins-managed Maven/JDK versions |
+| `parameters` | Pipeline start pannumbodhu user input |
+| `environment` | Global environment variables |
+| `credentials()` | Jenkins credential reference |
+| `options` | Pipeline-level behaviour/configuration |
+| `disableConcurrentBuilds()` | Same job multiple times simultaneously run aagadhu |
+| `timeout` | Pipeline/stage maximum execution time |
+| `buildDiscarder` | Old builds/logs cleanup |
+| `timestamps()` | Console log-ku timestamp |
+| `skipDefaultCheckout()` | Automatic checkout disable pannitu manual checkout |
+| `stage` | Pipeline logical phase |
+| `steps` | Stage-kulla actual commands |
+| `script` | Groovy scripting/custom logic |
+| `when` | Condition based on stage execution |
+| `dir()` | Specific directory-kulla commands execute panna |
+| `withCredentials` | Secret credentials temporarily expose panna |
+| `retry()` | Transient failure vandha retry panna |
+| `try/catch` | Error-ah catch panni custom handling panna |
+| `catchError` | Failure-ah catch panni pipeline behaviour control panna |
+| `stash` | Files temporary-ah save for another stage/agent |
+| `unstash` | Previously stashed files retrieve panna |
+| `archiveArtifacts` | Build artifacts Jenkins-la preserve panna |
+| `junit` | Test results Jenkins UI-la publish panna |
+| `post` | Pipeline/stage result based on actions |
+| `success` | Pipeline success aana execute |
+| `failure` | Pipeline failure aana execute |
+| `always` | Success/failure regardless execute |
+| `unstable` | Unstable build-ku execute |
+| `aborted` | User/system abort-ku execute |
+| `input` | Manual approval/gate |
+| `parallel` | Multiple independent stages simultaneously execute |
+| `pollSCM` | Periodically Git changes check |
+| `triggers` | Pipeline automatic trigger configuration |
+| `withSonarQubeEnv` | SonarQube server environment configure |
+| `waitForQualityGate` | SonarQube quality gate result wait |
+| `checkout scm` | Source code checkout |
+| `archiveArtifacts` | JAR/WAR etc. preserve |
+| `cleanWs()` | Workspace cleanup |
