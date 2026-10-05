@@ -1,0 +1,676 @@
+name: Application CI-CD
+
+# ============================================================
+# TRIGGERS
+# ============================================================
+
+on:
+
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+
+      environment:
+        description: "Deployment environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+
+      deploy:
+        description: "Deploy application?"
+        required: true
+        default: true
+        type: boolean
+
+
+# ============================================================
+# GLOBAL ENVIRONMENT VARIABLES
+# ============================================================
+
+env:
+
+  JAVA_VERSION: '17'
+
+  MAVEN_VERSION: '3.9.9'
+
+  APP_NAME: 'payment-service'
+
+  AWS_REGION: 'ap-south-1'
+
+  ECR_REPOSITORY: 'payment-service'
+
+  NEXUS_URL: 'https://nexus.company.com'
+
+  K8S_NAMESPACE: 'payment'
+
+  HELM_RELEASE: 'payment-service'
+
+  HELM_CHART: './helm/payment-service'
+
+
+# ============================================================
+# JOBS
+# ============================================================
+
+jobs:
+
+
+  # ==========================================================
+  # 1. BUILD + TEST
+  # ==========================================================
+
+  build:
+
+    name: Build and Test
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+
+    steps:
+
+      # ------------------------------------------------------
+      # CHECKOUT
+      # ------------------------------------------------------
+
+      - name: Checkout source code
+
+        uses: actions/checkout@v4
+
+        with:
+          fetch-depth: 0
+
+
+      # ------------------------------------------------------
+      # SETUP JAVA
+      # ------------------------------------------------------
+
+      - name: Setup Java
+
+        uses: actions/setup-java@v4
+
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+
+      # ------------------------------------------------------
+      # MAVEN BUILD
+      # ------------------------------------------------------
+
+      - name: Build application
+
+        run: |
+          mvn clean compile
+
+
+      # ------------------------------------------------------
+      # UNIT TEST
+      # ------------------------------------------------------
+
+      - name: Run unit tests
+
+        run: |
+          mvn test
+
+
+      # ------------------------------------------------------
+      # PUBLISH TEST RESULTS
+      # ------------------------------------------------------
+
+      - name: Upload test reports
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: test-reports
+          path: |
+            **/target/surefire-reports/
+
+
+      # ------------------------------------------------------
+      # SONARQUBE
+      # ------------------------------------------------------
+
+      - name: SonarQube analysis
+
+        env:
+
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+        run: |
+
+          mvn sonar:sonar \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.token=$SONAR_TOKEN
+
+
+      # ------------------------------------------------------
+      # PACKAGE
+      # ------------------------------------------------------
+
+      - name: Package JAR
+
+        run: |
+          mvn package -DskipTests
+
+
+      # ------------------------------------------------------
+      # UPLOAD JAR AS GITHUB ARTIFACT
+      # ------------------------------------------------------
+
+      - name: Upload application artifact
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: application-jar
+
+          path: target/*.jar
+
+
+  # ==========================================================
+  # 2. SECURITY SCAN
+  # ==========================================================
+
+  security:
+
+    name: Security Scan
+
+    runs-on: ubuntu-latest
+
+    needs: build
+
+    permissions:
+      contents: read
+
+
+    steps:
+
+      - name: Checkout
+
+        uses: actions/checkout@v4
+
+
+      - name: Setup Java
+
+        uses: actions/setup-java@v4
+
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+
+      # ------------------------------------------------------
+      # DEPENDENCY SECURITY SCAN
+      # ------------------------------------------------------
+
+      - name: Dependency vulnerability scan
+
+        run: |
+
+          echo "Running dependency security scan"
+
+          # Example:
+          # mvn org.owasp:dependency-check-maven:check
+
+
+      # ------------------------------------------------------
+      # DOWNLOAD JAR
+      # ------------------------------------------------------
+
+      - name: Download application artifact
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: application-jar
+
+          path: target/
+
+
+  # ==========================================================
+  # 3. PUBLISH ARTIFACT TO NEXUS
+  # ==========================================================
+
+  publish-nexus:
+
+    name: Publish Artifact to Nexus
+
+    runs-on: ubuntu-latest
+
+    needs:
+      - build
+      - security
+
+
+    steps:
+
+      - name: Download JAR
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: application-jar
+
+          path: target/
+
+
+      - name: Upload JAR to Nexus
+
+        env:
+
+          NEXUS_USER: ${{ secrets.NEXUS_USERNAME }}
+
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+        run: |
+
+          echo "Uploading artifact to Nexus"
+
+          curl \
+            -u "$NEXUS_USER:$NEXUS_PASSWORD" \
+            --upload-file target/*.jar \
+            "$NEXUS_URL/repository/releases/${APP_NAME}/${GITHUB_RUN_NUMBER}/${APP_NAME}-${GITHUB_RUN_NUMBER}.jar"
+
+
+  # ==========================================================
+  # 4. DOCKER BUILD + SECURITY + PUSH
+  # ==========================================================
+
+  docker:
+
+    name: Docker Build and Push
+
+    runs-on: ubuntu-latest
+
+    needs:
+      - build
+      - security
+      - publish-nexus
+
+    permissions:
+      contents: read
+
+
+    steps:
+
+      # ------------------------------------------------------
+      # CHECKOUT
+      # ------------------------------------------------------
+
+      - name: Checkout
+
+        uses: actions/checkout@v4
+
+
+      # ------------------------------------------------------
+      # DOWNLOAD JAR
+      # ------------------------------------------------------
+
+      - name: Download JAR
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: application-jar
+
+          path: target/
+
+
+      # ------------------------------------------------------
+      # SET IMAGE TAG
+      # ------------------------------------------------------
+
+      - name: Set Docker image tag
+
+        run: |
+
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+
+      # ------------------------------------------------------
+      # AWS AUTHENTICATION
+      # ------------------------------------------------------
+
+      - name: Configure AWS credentials
+
+        uses: aws-actions/configure-aws-credentials@v4
+
+        with:
+
+          aws-region: ${{ env.AWS_REGION }}
+
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      # ------------------------------------------------------
+      # LOGIN TO ECR
+      # ------------------------------------------------------
+
+      - name: Login to Amazon ECR
+
+        id: login-ecr
+
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # ------------------------------------------------------
+      # DOCKER BUILD
+      # ------------------------------------------------------
+
+      - name: Build Docker image
+
+        env:
+
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+        run: |
+
+          docker build \
+            -t $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+
+
+      # ------------------------------------------------------
+      # CONTAINER SECURITY SCAN
+      # ------------------------------------------------------
+
+      - name: Scan Docker image
+
+        run: |
+
+          echo "Running container security scan"
+
+          # Example:
+          # trivy image --exit-code 1 \
+          #   $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+
+      # ------------------------------------------------------
+      # PUSH IMAGE
+      # ------------------------------------------------------
+
+      - name: Push Docker image
+
+        env:
+
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+
+        run: |
+
+          docker push \
+            $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+
+  # ==========================================================
+  # 5. DEPLOY TO KUBERNETES
+  # ==========================================================
+
+  deploy:
+
+    name: Deploy to Kubernetes
+
+    runs-on: ubuntu-latest
+
+    needs: docker
+
+    if: ${{ github.event_name != 'pull_request' }}
+
+    environment:
+
+      name: ${{ inputs.environment || 'dev' }}
+
+
+    permissions:
+
+      contents: read
+
+
+    steps:
+
+
+      # ------------------------------------------------------
+      # CHECKOUT
+      # ------------------------------------------------------
+
+      - name: Checkout
+
+        uses: actions/checkout@v4
+
+
+      # ------------------------------------------------------
+      # AWS AUTHENTICATION
+      # ------------------------------------------------------
+
+      - name: Configure AWS credentials
+
+        uses: aws-actions/configure-aws-credentials@v4
+
+        with:
+
+          aws-region: ${{ env.AWS_REGION }}
+
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      # ------------------------------------------------------
+      # CONNECT TO EKS
+      # ------------------------------------------------------
+
+      - name: Configure kubectl
+
+        run: |
+
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name company-eks-cluster
+
+
+      # ------------------------------------------------------
+      # INSTALL HELM
+      # ------------------------------------------------------
+
+      - name: Setup Helm
+
+        uses: azure/setup-helm@v4
+
+
+      # ------------------------------------------------------
+      # HELM DEPLOYMENT
+      # ------------------------------------------------------
+
+      - name: Deploy application
+
+        run: |
+
+          helm upgrade --install \
+            $HELM_RELEASE \
+            $HELM_CHART \
+            --namespace $K8S_NAMESPACE \
+            --create-namespace \
+            --set image.repository=${{ secrets.ECR_REGISTRY }}/$ECR_REPOSITORY \
+            --set image.tag=${{ github.sha }}
+
+
+  # ==========================================================
+  # 6. VERIFY DEPLOYMENT
+  # ==========================================================
+
+  verify:
+
+    name: Verify Deployment
+
+    runs-on: ubuntu-latest
+
+    needs: deploy
+
+
+    steps:
+
+      - name: Configure AWS credentials
+
+        uses: aws-actions/configure-aws-credentials@v4
+
+        with:
+
+          aws-region: ${{ env.AWS_REGION }}
+
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      - name: Configure kubectl
+
+        run: |
+
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name company-eks-cluster
+
+
+      # ------------------------------------------------------
+      # ROLLOUT STATUS
+      # ------------------------------------------------------
+
+      - name: Check rollout
+
+        run: |
+
+          kubectl rollout status \
+            deployment/$APP_NAME \
+            -n $K8S_NAMESPACE \
+            --timeout=180s
+
+
+      # ------------------------------------------------------
+      # POD STATUS
+      # ------------------------------------------------------
+
+      - name: Check pods
+
+        run: |
+
+          kubectl get pods \
+            -n $K8S_NAMESPACE
+
+
+      # ------------------------------------------------------
+      # HEALTH CHECK
+      # ------------------------------------------------------
+
+      - name: Application smoke test
+
+        run: |
+
+          echo "Running application health check"
+
+          # Example:
+          # curl -f https://payment.company.com/actuator/health
+
+
+  # ==========================================================
+  # 7. ROLLBACK
+  # ==========================================================
+
+  rollback:
+
+    name: Rollback Deployment
+
+    runs-on: ubuntu-latest
+
+    needs: verify
+
+    if: ${{ failure() }}
+
+
+    steps:
+
+      - name: Configure AWS credentials
+
+        uses: aws-actions/configure-aws-credentials@v4
+
+        with:
+
+          aws-region: ${{ env.AWS_REGION }}
+
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+
+      - name: Configure kubectl
+
+        run: |
+
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name company-eks-cluster
+
+
+      - name: Rollback Kubernetes deployment
+
+        run: |
+
+          kubectl rollout undo \
+            deployment/$APP_NAME \
+            -n $K8S_NAMESPACE
+
+
+  # ==========================================================
+  # 8. NOTIFICATION
+  # ==========================================================
+
+  notification:
+
+    name: Pipeline Notification
+
+    runs-on: ubuntu-latest
+
+    needs:
+      - build
+      - security
+      - publish-nexus
+      - docker
+      - deploy
+      - verify
+
+    if: always()
+
+
+    steps:
+
+      - name: Pipeline result
+
+        run: |
+
+          echo "======================================"
+
+          echo "Application CI/CD completed"
+
+          echo "Repository : $GITHUB_REPOSITORY"
+
+          echo "Commit     : $GITHUB_SHA"
+
+          echo "Run Number : $GITHUB_RUN_NUMBER"
+
+          echo "======================================"
